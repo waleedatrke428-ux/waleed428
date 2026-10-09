@@ -1,0 +1,2 @@
+Alembic revisions live in versions/. Docker applies `alembic upgrade head` before
+starting the API. For development, run migrations from this directory.

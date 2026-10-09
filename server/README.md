@@ -1,0 +1,153 @@
+﻿# Informational futures-signals API
+
+This is a separate FastAPI/PostgreSQL service. It is informational only: it never
+places exchange orders, and its 0â€“100 technical-confluence score is not a
+probability, win rate, or investment recommendation.
+
+## Local startup
+
+1. Copy `.env.example` to `.env` in this directory. Set `JWT_SECRET` to a
+   private random value of at least 32 characters; do not commit `.env`.
+   Set `POSTGRES_PASSWORD` to an alphanumeric local password (compose uses it
+   in the local database URL). Add `ADMIN_EMAILS` as a comma-separated list of
+   addresses that may become administrators when registering.
+2. From this directory run `docker compose up --build`.
+3. The API is at `http://localhost:8000`; OpenAPI docs are at `/docs`. Health
+   check is `GET /health`. On first start the container applies Alembic
+   migrations before serving traffic.
+
+The compose build context is the project root so the image can copy the
+existing `../admin` static dashboard together with this server. FastAPI serves
+it at `http://localhost:8000/admin/`; there is no separate dashboard build.
+The dashboard's `window.APP_API_BASE_URL || window.location.origin` therefore
+uses the same origin by default. On a VPS, terminate TLS in a reverse proxy and
+proxy **both** `/api/` and `/admin/` to the API container; for example:
+
+```nginx
+location = /admin { return 308 /admin/; }
+location /admin/ { proxy_pass http://127.0.0.1:8000; }
+location /api/ { proxy_pass http://127.0.0.1:8000; }
+location = /health { proxy_pass http://127.0.0.1:8000; }
+```
+
+Persist the compose `postgres_data` volume and protect the host/DB network. For
+production, replace local passwords/secrets, use TLS, set `APP_BASE_URL` and
+restrict `ALLOWED_ORIGINS`. No deployment or credential provisioning is done
+by this repository.
+
+## Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | SQLAlchemy PostgreSQL URL |
+| `JWT_SECRET` | HS256 signing secret, minimum 32 characters |
+| `ACCESS_TOKEN_MINUTES` | Bearer-token lifetime (default 30) |
+| `ADMIN_EMAILS` | Emails assigned the admin role at registration; still require email verification |
+| `APP_BASE_URL` | Service URL for deployment integrations |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | SMTP verification-email delivery |
+| `ALLOWED_ORIGINS` | Comma-separated browser origins for CORS; same-origin needs no extra origin |
+| `POSTGRES_PASSWORD` | Compose-only database password |
+
+If SMTP is not configured, registration remains pending verification and the
+API reports `verificationEmailSent: false`; it never returns a verification
+token in the HTTP response. Configure SMTP and call
+`POST /api/auth/verify/request` to send a token. FCM/push delivery is not
+implemented; event and user alert data are exposed for later integration, but
+no push is represented as sent.
+
+## API contract
+
+All timestamps are ISO 8601 UTC unless a field explicitly describes a local
+display timezone. JSON errors use FastAPI's `detail`.
+
+### Flutter client
+
+- `POST /api/auth/register` body `{ "phone", "email", "password" }`; creates a
+  five-day server-timed trial immediately, but requires verified email before
+  login. Passwords are Argon2-hashed.
+- `POST /api/auth/login` body `{ "email", "password" }`; returns
+  `{ "accessToken", "tokenType": "Bearer", "expiresIn", "id", "email", "role", "user" }`.
+  A verified account is required. `role` is repeated at top level for the
+  existing dashboard.
+- `POST /api/auth/verify` body `{ "token" }`; consumes a single-use token.
+  `POST /api/auth/verify/request` body `{ "email" }` requests another email;
+  its generic response avoids account enumeration.
+- `GET /api/me/entitlement` requires bearer auth and returns
+  `{ serverTime, trialExpiresAt, subscriptionExpiresAt, expiresAt, active, remainingSeconds }`.
+  The trial ends exactly five days from server-recorded registration time;
+  access is inactive at the exclusive expiry boundary.
+- `GET /api/signals` requires a bearer token and active entitlement. Response:
+  `{ "items": [...] }` (plus score meaning and disclaimer). Signal items include
+  `id`, `exchange`, `symbol`, `direction`, `score`, `scoreType:
+  "technical_confluence"`, `timeframe`, `entry`, `stopLoss`, `takeProfits`
+  (TP1â€“TP3 array), `status`, `rationale`, and UTC timestamps. Only candidates
+  with score >=65 are stored/published.
+- `GET /api/markets?query=` is public and returns `{ "items":
+  [{ "exchange", "symbol", "base", "quote", "score" }], "providers": {...} }`.
+  `score` here is a logarithmic 24-hour activity/sort index, not the technical
+  signal score. Provider errors are reported as `unavailable`; other exchanges
+  can still return data. Search matches symbol/base across the complete
+  provider market lists (subject to provider pagination).
+- `GET /api/news` is public and returns `{ "items":
+  [{ "title", "source", "url", "publishedAt" }], "providers": {...} }`.
+  Headlines are link-only and retain RSS source attribution.
+- `POST /api/me/signals/{id}/entered` body `{ "note"?: string }` records a
+  user-specific entered-trade journal entry; repeating it is idempotent.
+  `GET /api/me/journal` lists that user's entries.
+- `GET /api/me/alerts` lists event records for signals the user entered;
+  `GET/PUT /api/me/settings` manages per-user alert preferences. The client may
+  send `X-Timezone: Europe/Paris` (IANA timezone derived from device settings,
+  not GPS) to `GET /api/me/session-hours`; London reference hours (08:00â€“17:00)
+  are also returned converted to that local timezone.
+- `GET /api/signals/{id}/events` returns persisted entry, stop, target, reversal
+  and signal-created event data. The response explicitly reports that FCM
+  delivery is not configured.
+
+### Admin dashboard and operations
+
+Every `/api/admin/*` request is authorized by the role stored in PostgreSQL;
+the token's role claim alone is never trusted. Admin accounts are bootstrapped
+only for configured `ADMIN_EMAILS`, after normal email verification.
+
+- `GET /api/admin/users` -> `{ "items": [{ "id", "email", "phone", "role",
+  "status", "accessEndsAt", "expiresAt", "trialEndsAt", "entitlement", ... }] }`.
+- `POST /api/admin/users/{id}/subscriptions` body `{ "months": 1..24 }` ->
+  `{ "userId", "months", "startsAt", "expiresAt", "active" }`. Calendar months
+  begin at the later of server-now or existing entitlement expiry.
+- `GET /api/admin/signals` -> `{ "items": [signal, ...] }`.
+- `GET /api/admin/settings` -> `{ "minSignalScore", "activeExchanges",
+  "minimumSignalScore", "exchanges", "settings", "allowedExchanges" }`.
+- `PUT /api/admin/settings` accepts either canonical Flutter fields
+  `{ "minSignalScore": 65..100, "activeExchanges": ["binance","bybit","okx"] }`
+  or the current dashboard fields
+  `{ "minimumSignalScore": 65..100, "exchanges": [...] }`. Both names are
+  returned for dashboard compatibility; validation rejects score <65 and
+  unknown/duplicate exchange IDs.
+
+## Scanner and explicit boundaries
+
+The automatic scanner calls only public market-data endpoints: Binance USDâ“ˆ-M
+Futures, Bybit linear perpetuals, and OKX USDT swaps. Every five minutes it
+cycles through all listed markets in batches of three per enabled exchange. The
+1D and 4H moving-average directions must agree before a candidate is considered;
+1H trend supplies trigger-context confluence; closed 15m candles supply the entry trigger, local support/resistance, volume, RSI, and structure-break checks. It stores only scores at/above the configured floor
+(never below 65). Lifecycle
+monitoring records entry/SL/TP1â€“TP3 and qualified opposite-signal reversals.
+Provider failures skip affected symbols and are logged; public market/news
+responses include per-provider availability rather than fabricating results.
+Scanning is a single-process in-memory scheduler; run one API worker/replica
+unless a distributed scan lease is added. The deterministic rules have not been
+backtested and carry no performance or profitability claims.
+
+This core does not send FCM/email notifications beyond verification, calculate
+exchange execution prices, execute trades, collect GPS, or claim that any
+signal is profitable. Signals may be absent when market data is unavailable
+or no analysis qualifies. Manual subscriptions only extend access; no payment
+gateway or SMS verification is included.
+
+## Tests
+
+With the dependencies in `requirements.txt` installed, run `pytest -q` from
+this directory. Tests cover indicator outputs, the >=65 signal gate, entitlement
+expiry boundary, calendar-month extension, password/token handling and admin
+settings validation.
