@@ -15,6 +15,17 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check and test Supabase Edge Function
+        working-directory: supabase/functions/api
+        run: |
+          deno check index.ts index_test.ts
+          deno test --allow-env index_test.ts
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
