@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 30
     admin_emails: str = ""
     app_base_url: str = "http://localhost:8000"
+    brevo_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""

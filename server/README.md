@@ -21,8 +21,9 @@ code. Management is performed by the separate Android manager app; this API
 does not serve a web dashboard. Both Android apps must use this API base URL
 over HTTPS (`API_BASE_URL` in GitHub Actions; `MANAGER_API_BASE_URL` may
 override it for the manager). The old PHP-only host cannot provide the
-authentication, entitlement, signal, or management API. On a VPS, terminate TLS in a reverse proxy and
-proxy the API and health check to the container; for example:
+authentication, entitlement, signal, or management API. On a VPS, terminate
+TLS in a reverse proxy and proxy the API and health check to the container; for
+example:
 
 ```nginx
 location /api/ { proxy_pass http://127.0.0.1:8000; }
@@ -34,11 +35,31 @@ production, replace local passwords/secrets, use TLS, set `APP_BASE_URL` and
 restrict `ALLOWED_ORIGINS`. No deployment or credential provisioning is done
 by this repository.
 
-Free hosting can be used for a trial deployment, but check its sleep/cold-start
-limits, database persistence/expiry, outbound market-data access, and regional
-availability first. The API needs a continuously reachable HTTPS service and a
-persistent PostgreSQL database to preserve accounts, trials, and subscriptions;
-ephemeral storage is not suitable for the database.
+## Free trial deployment
+
+The repository includes a Render Blueprint in `../render.yaml`. For a free
+trial, create a Supabase PostgreSQL project and a Render Blueprint from this
+repository; supply the Supabase connection string as `DATABASE_URL` (use the
+`postgresql+psycopg://` SQLAlchemy driver and require TLS), and keep the
+generated `JWT_SECRET`. Set `ADMIN_EMAILS` to the administrator's email.
+Supabase's free database currently has a 500 MB limit and may pause after a
+week without activity; Render's free API sleeps after 15 minutes without
+requests and can take about a minute to wake. The scanner pauses while the API
+is asleep, so this is suitable only for a test/closed beta, not timely production
+signals. Confirm the current quotas and availability in the providers'
+dashboards before using real subscriber data.
+
+Render blocks outbound SMTP ports on free services. To send account-verification
+mail there, configure a Brevo account, verify a sender address, then provide
+`BREVO_API_KEY` and that address as `SMTP_FROM` in Render's environment. The
+mailer uses Brevo's HTTPS API when that key is present and retains SMTP support
+for other deployments. Never commit provider keys or send them in chat.
+
+After Render deploys successfully, copy its HTTPS service URL into the GitHub
+repository variable `API_BASE_URL` under **Settings → Secrets and variables →
+Actions → Variables**. Re-run the Android workflow to bake that URL into both
+APK files. The manager app uses `MANAGER_API_BASE_URL` only when you explicitly
+set it; otherwise it shares `API_BASE_URL`.
 
 ## Configuration
 
@@ -49,13 +70,15 @@ ephemeral storage is not suitable for the database.
 | `ACCESS_TOKEN_MINUTES` | Bearer-token lifetime (default 30) |
 | `ADMIN_EMAILS` | Emails assigned the admin role at registration; still require email verification |
 | `APP_BASE_URL` | Service URL for deployment integrations |
+| `BREVO_API_KEY` | Optional HTTPS transactional-email API key (used before SMTP) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | SMTP verification-email delivery |
 | `ALLOWED_ORIGINS` | Comma-separated browser origins for CORS; same-origin needs no extra origin |
 | `POSTGRES_PASSWORD` | Compose-only database password |
 
-If SMTP is not configured, registration remains pending verification and the
-API reports `verificationEmailSent: false`; it never returns a verification
-token in the HTTP response. Configure SMTP and call
+If neither Brevo (`BREVO_API_KEY` and `SMTP_FROM`) nor SMTP delivery is
+configured, registration remains pending verification and the API reports
+`verificationEmailSent: false`; it never returns a verification token in the
+HTTP response. Configure one of those mail providers and call
 `POST /api/auth/verify/request` to send a token. FCM/push delivery is not
 implemented; event and user alert data are exposed for later integration, but
 no push is represented as sent.
