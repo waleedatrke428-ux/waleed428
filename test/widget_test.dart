@@ -10,14 +10,17 @@ import 'package:http/testing.dart';
 void main() {
   testWidgets('requires account login before showing signals', (tester) async {
     final client = ApiClient(
-      'https://api.example.test',
+      'https://project-ref.supabase.co/functions/v1/api/',
       httpClient: MockClient(
         (_) async => throw StateError('Unexpected request before login'),
       ),
     );
 
     await tester.pumpWidget(
-      SignalsApp(client: client, apiBaseUrl: 'https://api.example.test'),
+      SignalsApp(
+        client: client,
+        apiBaseUrl: 'https://project-ref.supabase.co/functions/v1/api/',
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -32,7 +35,7 @@ void main() {
   test('reports HTML hosting challenge instead of treating it as JSON',
       () async {
     final client = ApiClient(
-      'https://api.example.test',
+      'https://project-ref.supabase.co/functions/v1/api/',
       httpClient: MockClient(
         (_) async => http.Response(
           '<html><body>Challenge</body></html>',
@@ -56,9 +59,9 @@ void main() {
 
   test('loads protected signals and adapts the FastAPI response', () async {
     final client = ApiClient(
-      'https://api.example.test',
+      'https://project-ref.supabase.co/functions/v1/api/',
       httpClient: MockClient((request) async {
-        expect(request.url.path, '/api/signals');
+        expect(request.url.path, '/functions/v1/api/signals');
         expect(request.headers['authorization'], 'Bearer test-token');
         return http.Response(
           jsonEncode({

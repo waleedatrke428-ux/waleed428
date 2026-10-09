@@ -1,0 +1,4 @@
+project_id = "cloud-mobile-starter"
+
+[functions.api]
+verify_jwt = false

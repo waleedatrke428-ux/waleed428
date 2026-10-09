@@ -141,7 +141,11 @@ jobs:
       - name: Build release APK
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL }}
-        run: flutter build apk --release --dart-define="API_BASE_URL=$API_BASE_URL"
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build apk --release \
+            --dart-define="API_BASE_URL=$API_BASE_URL" \
+            --dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -240,7 +244,11 @@ jobs:
         working-directory: manager_app
         env:
           API_BASE_URL: ${{ vars.MANAGER_API_BASE_URL || vars.API_BASE_URL }}
-        run: flutter build apk --release --dart-define="API_BASE_URL=$API_BASE_URL"
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build apk --release \
+            --dart-define="API_BASE_URL=$API_BASE_URL" \
+            --dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
 
       - name: Upload manager APK artifact
         uses: actions/upload-artifact@v4

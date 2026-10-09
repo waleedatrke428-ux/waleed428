@@ -8,9 +8,9 @@ import 'package:http/testing.dart';
 void main() {
   test('refuses manager login when API role is not admin', () async {
     final api = ManagerApi(
-      'https://api.example.test',
+      'https://project-ref.supabase.co/functions/v1/api/',
       httpClient: MockClient((request) async {
-        expect(request.url.path, '/api/auth/login');
+        expect(request.url.path, '/functions/v1/api/auth/login');
         return http.Response(
           jsonEncode({'role': 'user', 'accessToken': 'token'}),
           200,
@@ -28,16 +28,19 @@ void main() {
   test('attaches bearer auth and sends subscription extension request',
       () async {
     final api = ManagerApi(
-      'https://api.example.test',
+      'https://project-ref.supabase.co/functions/v1/api/',
       httpClient: MockClient((request) async {
-        if (request.url.path == '/api/auth/login') {
+        if (request.url.path == '/functions/v1/api/auth/login') {
           return http.Response(
             jsonEncode({'role': 'admin', 'accessToken': 'admin-token'}),
             200,
             headers: {'content-type': 'application/json'},
           );
         }
-        expect(request.url.path, '/api/admin/users/user-id/subscriptions');
+        expect(
+          request.url.path,
+          '/functions/v1/api/admin/users/user-id/subscriptions',
+        );
         expect(request.headers['authorization'], 'Bearer admin-token');
         expect(jsonDecode(request.body), {'months': 1});
         return http.Response(

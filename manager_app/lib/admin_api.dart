@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+
 class ManagerApiException implements Exception {
   const ManagerApiException(this.message);
 
@@ -83,6 +85,7 @@ class ManagerApi {
     bool authenticated = true,
   }) async {
     final headers = <String, String>{'Accept': 'application/json'};
+    if (_supabaseAnonKey.isNotEmpty) headers['apikey'] = _supabaseAnonKey;
     if (body != null) headers['Content-Type'] = 'application/json';
     final token = _token;
     if (authenticated && token != null) {
@@ -91,7 +94,13 @@ class ManagerApi {
 
     late http.Response response;
     try {
-      final request = http.Request(method, _baseUri.resolve(path))
+      final baseUri = _baseUri.path.endsWith('/')
+          ? _baseUri
+          : _baseUri.replace(path: '${_baseUri.path}/');
+      final apiPath = _baseUri.path.contains('/functions/v1/api')
+          ? path.replaceFirst(RegExp(r'^/api/'), '')
+          : path;
+      final request = http.Request(method, baseUri.resolve(apiPath))
         ..headers.addAll(headers);
       if (body != null) request.body = jsonEncode(body);
       final stream = await _client.send(request).timeout(

@@ -1,0 +1,76 @@
+name: Deploy Supabase API
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-supabase-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+      SCAN_SECRET: ${{ secrets.SCAN_SECRET }}
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          missing=()
+          for name in \
+            SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF SUPABASE_DB_PASSWORD \
+            JWT_SECRET ADMIN_EMAILS SCAN_SECRET BREVO_API_KEY SMTP_FROM; do
+            if [[ -z "${!name}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub Actions secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+          if (( ${#JWT_SECRET} < 32 || ${#SCAN_SECRET} < 32 )); then
+            echo "JWT_SECRET and SCAN_SECRET must each be at least 32 characters." >&2
+            exit 1
+          fi
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project and apply database migration
+        working-directory: supabase
+        run: |
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --linked
+
+      - name: Configure Edge Function secrets
+        run: |
+          supabase secrets set \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            "JWT_SECRET=$JWT_SECRET" \
+            "ADMIN_EMAILS=$ADMIN_EMAILS" \
+            "SCAN_SECRET=$SCAN_SECRET" \
+            "BREVO_API_KEY=$BREVO_API_KEY" \
+            "SMTP_FROM=$SMTP_FROM"
+
+      - name: Deploy Edge Function
+        run: |
+          supabase functions deploy api \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --no-verify-jwt
