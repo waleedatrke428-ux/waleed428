@@ -15,14 +15,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Check administration dashboard JavaScript
-        run: node --check admin/app.js
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -154,7 +146,106 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: waleed428-signals-android-apk
+          name: crypto-balhousi-user-android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Generate manager Android project
+        working-directory: manager_app
+        run: flutter create --platforms=android --project-name crypto_manager --org com.balhousi --no-pub .
+
+      - name: Set manager app name, internet access, and screen protection
+        working-directory: manager_app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          content = manifest.read_text(encoding="utf-8")
+          if "android.permission.INTERNET" not in content:
+              root = re.search(r"<manifest\b[^>]*>", content)
+              if root is None:
+                  raise SystemExit(f"Could not locate manifest root in {manifest}")
+              content = (
+                  content[:root.end()]
+                  + '\n    <uses-permission android:name="android.permission.INTERNET" />'
+                  + content[root.end():]
+              )
+          updated, replacements = re.subn(
+              r'(<application\b[^>]*\bandroid:label=")[^"]+(")',
+              r'\1كريبتو البلحوسي - المدير\2',
+              content,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if replacements != 1:
+              raise SystemExit(f"Could not set app label in {manifest}")
+          if "android.permission.INTERNET" not in updated:
+              raise SystemExit(f"Internet permission missing from {manifest}")
+          manifest.write_text(updated, encoding="utf-8")
+
+          matches = list(Path("android/app/src/main/kotlin").rglob("MainActivity.kt"))
+          if len(matches) != 1:
+              raise SystemExit(f"Expected one MainActivity.kt, found {len(matches)}")
+          activity = matches[0]
+          package = re.search(r"^package\s+([\w.]+)", activity.read_text(), re.MULTILINE)
+          if package is None:
+              raise SystemExit(f"Could not read package from {activity}")
+          activity.write_text(f'''package {package.group(1)}
+
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+
+          class MainActivity : FlutterActivity() {{
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {{
+                  super.configureFlutterEngine(flutterEngine)
+                  window.setFlags(
+                      android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                      android.view.WindowManager.LayoutParams.FLAG_SECURE
+                  )
+              }}
+          }}
+          ''')
+          PY
+
+      - name: Set manager Android minimum SDK
+        working-directory: manager_app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gradle_file = Path("android/app/build.gradle.kts")
+          content = gradle_file.read_text()
+          template_value = "minSdk = flutter.minSdkVersion"
+          if content.count(template_value) != 1:
+              raise SystemExit(f"Expected one minSdk setting in {gradle_file}")
+          gradle_file.write_text(content.replace(template_value, "minSdk = 21"))
+          PY
+
+      - name: Resolve manager dependencies
+        working-directory: manager_app
+        run: flutter pub get
+
+      - name: Analyze manager app
+        working-directory: manager_app
+        run: flutter analyze
+
+      - name: Test manager app
+        working-directory: manager_app
+        run: flutter test
+
+      - name: Build manager release APK
+        working-directory: manager_app
+        env:
+          API_BASE_URL: ${{ vars.MANAGER_API_BASE_URL }}
+        run: flutter build apk --release --dart-define="API_BASE_URL=$API_BASE_URL"
+
+      - name: Upload manager APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-balhousi-manager-android-apk
+          path: manager_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7

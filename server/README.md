@@ -16,16 +16,12 @@ probability, win rate, or investment recommendation.
    check is `GET /health`. On first start the container applies Alembic
    migrations before serving traffic.
 
-The compose build context is the project root so the image can copy the
-existing `../admin` static dashboard together with this server. FastAPI serves
-it at `http://localhost:8000/admin/`; there is no separate dashboard build.
-The dashboard's `window.APP_API_BASE_URL || window.location.origin` therefore
-uses the same origin by default. On a VPS, terminate TLS in a reverse proxy and
-proxy **both** `/api/` and `/admin/` to the API container; for example:
+The compose build context is the project root so the image can copy the server
+code. Management is performed by the separate Android manager app; this API
+does not serve a web dashboard. On a VPS, terminate TLS in a reverse proxy and
+proxy the API and health check to the container; for example:
 
 ```nginx
-location = /admin { return 308 /admin/; }
-location /admin/ { proxy_pass http://127.0.0.1:8000; }
 location /api/ { proxy_pass http://127.0.0.1:8000; }
 location = /health { proxy_pass http://127.0.0.1:8000; }
 ```
@@ -67,8 +63,8 @@ display timezone. JSON errors use FastAPI's `detail`.
   login. Passwords are Argon2-hashed.
 - `POST /api/auth/login` body `{ "email", "password" }`; returns
   `{ "accessToken", "tokenType": "Bearer", "expiresIn", "id", "email", "role", "user" }`.
-  A verified account is required. `role` is repeated at top level for the
-  existing dashboard.
+  A verified account is required. The manager app additionally requires the
+  returned role to be `admin`.
 - `POST /api/auth/verify` body `{ "token" }`; consumes a single-use token.
   `POST /api/auth/verify/request` body `{ "email" }` requests another email;
   its generic response avoids account enumeration.
@@ -103,11 +99,14 @@ display timezone. JSON errors use FastAPI's `detail`.
   and signal-created event data. The response explicitly reports that FCM
   delivery is not configured.
 
-### Admin dashboard and operations
+### Manager app administration
 
 Every `/api/admin/*` request is authorized by the role stored in PostgreSQL;
 the token's role claim alone is never trusted. Admin accounts are bootstrapped
-only for configured `ADMIN_EMAILS`, after normal email verification.
+only for configured `ADMIN_EMAILS`, after normal email verification. Register
+the configured administrator email using the user app, complete email
+verification, and sign in to the separate manager app. The manager app has no
+public registration flow.
 
 - `GET /api/admin/users` -> `{ "items": [{ "id", "email", "phone", "role",
   "status", "accessEndsAt", "expiresAt", "trialEndsAt", "entitlement", ... }] }`.
@@ -119,9 +118,8 @@ only for configured `ADMIN_EMAILS`, after normal email verification.
   "minimumSignalScore", "exchanges", "settings", "allowedExchanges" }`.
 - `PUT /api/admin/settings` accepts either canonical Flutter fields
   `{ "minSignalScore": 65..100, "activeExchanges": ["binance","bybit","okx"] }`
-  or the current dashboard fields
-  `{ "minimumSignalScore": 65..100, "exchanges": [...] }`. Both names are
-  returned for dashboard compatibility; validation rejects score <65 and
+  (legacy aliases are also accepted). Both naming styles are returned for
+  compatibility; validation rejects score <65 and
   unknown/duplicate exchange IDs.
 
 ## Scanner and explicit boundaries

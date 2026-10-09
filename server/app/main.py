@@ -3,14 +3,12 @@ import logging
 import time
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -194,11 +192,6 @@ origins = [origin.strip() for origin in get_settings().allowed_origins.split(","
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT"], allow_headers=["Authorization", "Content-Type", "X-Timezone"])
-admin_candidates = (Path(__file__).resolve().parents[2] / "admin",
-                    Path(__file__).resolve().parents[1] / "admin")
-admin_directory = next((candidate for candidate in admin_candidates if candidate.is_dir()), None)
-if admin_directory is not None:
-    app.mount("/admin", StaticFiles(directory=admin_directory, html=True), name="admin")
 
 
 @app.middleware("http")
