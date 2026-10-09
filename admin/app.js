@@ -25,7 +25,14 @@
     } catch {
       throw new Error('تعذّر الاتصال بالخادم.');
     }
-    const payload = response.status === 204 ? {} : await response.json().catch(() => ({}));
+    let payload = {};
+    if (response.status !== 204) {
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error('أعاد الخادم استجابة غير صالحة.');
+      }
+    }
     if (!response.ok) {
       const message = payload.message || payload.detail || `فشل الطلب (${response.status}).`;
       if (response.status === 401 || response.status === 403) logout(false);
@@ -85,7 +92,10 @@
   }
 
   function items(payload) {
-    return Array.isArray(payload.items) ? payload.items : [];
+    if (!Array.isArray(payload.items)) {
+      throw new Error('استجابة الخادم لا تحتوي قائمة عناصر صالحة.');
+    }
+    return payload.items;
   }
 
   async function loadUsers() {

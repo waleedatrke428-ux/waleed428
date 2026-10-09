@@ -23,6 +23,17 @@ jobs:
       - name: Check administration dashboard JavaScript
         run: node --check admin/app.js
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test backend signal logic
+        working-directory: server
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pytest tests
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -55,16 +66,26 @@ jobs:
           activity.write_text(f'''package {package.group(1)}
 
           import android.os.Bundle
-          import android.view.WindowManager
           import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          import java.util.TimeZone
 
           class MainActivity : FlutterActivity() {{
-              override fun onCreate(savedInstanceState: Bundle?) {{
-                  super.onCreate(savedInstanceState)
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {{
+                  super.configureFlutterEngine(flutterEngine)
                   window.setFlags(
-                      WindowManager.LayoutParams.FLAG_SECURE,
-                      WindowManager.LayoutParams.FLAG_SECURE
+                      android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                      android.view.WindowManager.LayoutParams.FLAG_SECURE
                   )
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "cloud_mobile_starter/device")
+                      .setMethodCallHandler {{ call, result ->
+                          if (call.method == "timezoneId") {{
+                              result.success(TimeZone.getDefault().id)
+                          }} else {{
+                              result.notImplemented()
+                          }}
+                      }}
               }}
           }}
           ''')

@@ -1,14 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api_client.dart';
 
 const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+final _apiBaseUrlIsValid = _isValidApiBaseUrl(_apiBaseUrl);
 
 void main() {
   runApp(const SignalsApp());
+}
+
+bool _isValidApiBaseUrl(String value) {
+  final uri = Uri.tryParse(value);
+  return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
 }
 
 class SignalsApp extends StatelessWidget {
@@ -25,7 +32,7 @@ class SignalsApp extends StatelessWidget {
         fontFamily: 'Roboto',
         useMaterial3: true,
       ),
-      home: _apiBaseUrl.isEmpty
+      home: !_apiBaseUrlIsValid
           ? const ServerSetupPage()
           : LoginPage(client: ApiClient(_apiBaseUrl)),
     );
@@ -82,7 +89,9 @@ class _LoginPageState extends State<LoginPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _phone = TextEditingController();
+  final _verificationToken = TextEditingController();
   var _registering = false;
+  var _verificationRequired = false;
   var _busy = false;
   String? _error;
 
@@ -91,6 +100,7 @@ class _LoginPageState extends State<LoginPage> {
     _email.dispose();
     _password.dispose();
     _phone.dispose();
+    _verificationToken.dispose();
     super.dispose();
   }
 
@@ -118,7 +128,20 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         );
-        setState(() => _registering = false);
+        setState(() {
+          _registering = false;
+          _verificationRequired = true;
+        });
+      } else if (_verificationRequired) {
+        await widget.client.verifyEmail(_verificationToken.text.trim());
+        if (!mounted) return;
+        setState(() {
+          _verificationRequired = false;
+          _verificationToken.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تأكيد البريد. يمكنك تسجيل الدخول.')),
+        );
       } else {
         final result = await widget.client.login(
           email: _email.text.trim(),
@@ -181,6 +204,26 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 14),
                     ],
+                    if (_verificationRequired) ...[
+                      const Text(
+                        'أدخل رمز التحقق الذي وصلك على البريد الإلكتروني.',
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _verificationToken,
+                        decoration: const InputDecoration(
+                          labelText: 'رمز التحقق',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) =>
+                            _verificationRequired &&
+                                    (value == null || value.trim().isEmpty)
+                                ? 'أدخل رمز التحقق'
+                                : null,
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    if (!_verificationRequired) ...[
                     TextFormField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
@@ -203,10 +246,11 @@ class _LoginPageState extends State<LoginPage> {
                         labelText: 'كلمة المرور',
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) => value == null || value.length < 10
-                          ? 'يجب أن تكون كلمة المرور 10 محارف على الأقل'
+                      validator: (value) => value == null || value.length < 12
+                          ? 'يجب أن تكون كلمة المرور 12 محرفاً على الأقل'
                           : null,
                     ),
+                    ],
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -223,19 +267,28 @@ class _LoginPageState extends State<LoginPage> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_registering ? 'إنشاء الحساب' : 'دخول'),
+                          : Text(
+                              _verificationRequired
+                                  ? 'تأكيد البريد'
+                                  : _registering
+                                      ? 'إنشاء الحساب'
+                                      : 'دخول',
+                            ),
                     ),
                     TextButton(
                       onPressed: _busy
                           ? null
                           : () => setState(() {
                                 _registering = !_registering;
+                                _verificationRequired = false;
                                 _error = null;
                               }),
                       child: Text(
-                        _registering
-                            ? 'لديك حساب؟ سجل الدخول'
-                            : 'إنشاء حساب جديد',
+                        _verificationRequired
+                            ? 'العودة إلى تسجيل الدخول'
+                            : _registering
+                                ? 'لديك حساب؟ سجل الدخول'
+                                : 'إنشاء حساب جديد',
                       ),
                     ),
                     const Text(
@@ -453,9 +506,10 @@ class SignalDetails extends StatelessWidget {
             _DetailRow('المنصة', _string(signal, 'exchange', '—')),
             _DetailRow('الدخول', _string(signal, 'entry', '—')),
             _DetailRow('وقف الخسارة', _string(signal, 'stopLoss', '—')),
-            if (targets is List)
-              for (var i = 0; i < targets.length && i < 3; i++)
-                _DetailRow('الهدف ${i + 1}', '${targets[i]}'),
+            final takeProfits = targets ?? signal['takeProfits'];
+            if (takeProfits is List)
+              for (var i = 0; i < takeProfits.length && i < 3; i++)
+                _DetailRow('الهدف ${i + 1}', '${takeProfits[i]}'),
             if (levels is Map)
               for (final entry in levels.entries)
                 _DetailRow(entry.key, '${entry.value}'),
@@ -681,11 +735,22 @@ class AccountPage extends StatefulWidget {
 
 class _AccountPageState extends State<AccountPage> {
   late Future<Map<String, dynamic>> _entitlement;
+  late Future<Map<String, dynamic>> _sessionHours;
 
   @override
   void initState() {
     super.initState();
     _entitlement = widget.client.getEntitlement();
+    _sessionHours = _loadSessionHours();
+  }
+
+  Future<Map<String, dynamic>> _loadSessionHours() async {
+    const channel = MethodChannel('cloud_mobile_starter/device');
+    final timezone = await channel.invokeMethod<String>('timezoneId');
+    if (timezone == null || timezone.isEmpty) {
+      throw const ApiException('تعذّر تحديد المنطقة الزمنية للجهاز.');
+    }
+    return widget.client.getSessionHours(timezone);
   }
 
   @override
@@ -710,9 +775,12 @@ class _AccountPageState extends State<AccountPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('حالة الوصول: ${_string(data, 'status', '—')}'),
                       Text(
-                        'ينتهي في: ${_localTime(data['expiresAt'] ?? data['trialEndsAt'])}',
+                        'حالة الوصول: '
+                        '${data['active'] == true ? 'فعّال' : 'منتهي'}',
+                      ),
+                      Text(
+                        'ينتهي في: ${_localTime(data['expiresAt'] ?? data['trialExpiresAt'])}',
                       ),
                       Text('الوقت المتبقي: ${_remaining(data)}'),
                     ],
@@ -726,6 +794,32 @@ class _AccountPageState extends State<AccountPage> {
             title: const Text('التوقيت المحلي للجهاز'),
             subtitle: Text('$localZone · ${DateTime.now().timeZoneOffset}'),
           ),
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _sessionHours,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return ListTile(
+                        leading: const Icon(Icons.access_time),
+                        title: const Text('ساعات جلسة لندن'),
+                        subtitle: Text('تعذّر تحميل الساعات: ${snapshot.error}'),
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return const ListTile(
+                        leading: Icon(Icons.access_time),
+                        title: Text('ساعات جلسة لندن'),
+                        subtitle: LinearProgressIndicator(),
+                      );
+                    }
+                    final data = snapshot.data!;
+                    final local = data['local'] ?? data['localHours'] ?? data;
+                    return ListTile(
+                      leading: const Icon(Icons.access_time),
+                      title: const Text('جلسة لندن بالتوقيت المحلي'),
+                      subtitle: Text(_sessionHoursLabel(local)),
+                    );
+                  },
+                ),
           const ListTile(
             leading: Icon(Icons.shield_outlined),
             title: Text('لقطات الشاشة والمشاركة محظورة في التطبيق'),
@@ -884,4 +978,13 @@ String _remaining(Map<String, dynamic> entitlement) {
   final hours = remaining.inHours.remainder(24);
   final minutes = remaining.inMinutes.remainder(60);
   return '$days يوم · $hours ساعة · $minutes دقيقة';
+}
+
+String _sessionHoursLabel(Object? value) {
+  if (value is! Map<String, dynamic>) return 'الساعات غير متاحة.';
+  final start = value['start'];
+  final end = value['end'];
+  final date = value['date'];
+  if (start is! String || end is! String) return 'الساعات غير متاحة.';
+  return '${start}–$end${date is String ? ' · $date' : ''}';
 }

@@ -43,8 +43,15 @@ class ApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> verifyEmail(String token) {
+    return _send('POST', '/api/auth/verify', body: {'token': token});
+  }
+
   Future<Map<String, dynamic>> getEntitlement() =>
       _send('GET', '/api/me/entitlement');
+
+  Future<Map<String, dynamic>> getSessionHours(String timezone) =>
+      _send('GET', '/api/me/session-hours', extraHeaders: {'X-Timezone': timezone});
 
   Future<List<Map<String, dynamic>>> getSignals() =>
       _getItems('/api/signals');
@@ -80,10 +87,12 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
     Map<String, Object?>? body,
+    Map<String, String>? extraHeaders,
   }) async {
     final uri = _baseUri.resolve(path).replace(queryParameters: query);
     final headers = <String, String>{'Accept': 'application/json'};
     if (body != null) headers['Content-Type'] = 'application/json';
+    if (extraHeaders != null) headers.addAll(extraHeaders);
     final token = accessToken;
     if (token != null) headers['Authorization'] = 'Bearer $token';
 
