@@ -44,10 +44,14 @@ function b64url(bytes: Uint8Array): string {
   for (const value of bytes) binary += String.fromCharCode(value);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
-function decodeB64url(value: string): Uint8Array {
+function decodeB64url(value: string): Uint8Array<ArrayBuffer> {
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
   const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   let difference = a.length ^ b.length;
@@ -55,7 +59,7 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   for (let i = 0; i < count; i++) difference |= (a[i % (a.length || 1)] ?? 0) ^ (b[i % (b.length || 1)] ?? 0);
   return difference === 0;
 }
-function secretBytes(): Uint8Array {
+function secretBytes(): Uint8Array<ArrayBuffer> {
   const secret = env("JWT_SECRET");
   if (new TextEncoder().encode(secret).length < 32) {
     throw new Error("JWT_SECRET must contain at least 32 bytes");
@@ -80,7 +84,11 @@ export async function verifyPassword(password: string, stored: string): Promise<
     return constantTimeEqual(actual, decodeB64url(digestText));
   } catch { return false; }
 }
-async function passwordKeyWithIterations(password: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
+async function passwordKeyWithIterations(
+  password: string,
+  salt: Uint8Array<ArrayBuffer>,
+  iterations: number,
+): Promise<CryptoKey> {
   const material = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt, iterations }, material, 256,
