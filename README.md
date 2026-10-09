@@ -1,19 +1,33 @@
-# Cloud Mobile Starter
+# تطبيق إشارات السوق
 
-A minimal Flutter starter whose Android APK is built on GitHub Actions. No
-Android SDK, Java installation, or emulator is required on the development
-machine.
+تطبيق Android للمستخدمين مع بناء APK سحابي، وخدمة خلفية ولوحة إدارة ويب قيد
+التجهيز. المشروع لا ينفّذ صفقات ولا يطلب مفاتيح تداول من المستخدم.
 
-## Cloud build
+## وضع المشروع
 
-Use this folder as the root of its own GitHub repository. The workflow at
-`.github/workflows/build.yml` installs Java 17 and Flutter on a GitHub-hosted
-runner, generates the Android platform files, sets Android `minSdk` to 21,
-runs analysis and tests, and builds a release APK.
+- واجهات Android عربية تشمل تسجيل الدخول/الحساب، الإشارات، العملات والبحث،
+  الأخبار، الحساب، تفاصيل الصفقة وتسجيل أن المستخدم دخلها.
+- لا يعرض التطبيق أسعاراً أو إشارات تجريبية عندما لا يكون الخادم مضبوطاً.
+- تتطلب تجربة المستخدم عنوان خادم HTTPS مضبوطاً في GitHub Actions بمتغير
+  المستودع `API_BASE_URL`. بعد نشر الخدمة على VPS، أضف هذا المتغير في
+  `Settings > Secrets and variables > Actions > Variables`.
+- خدمة الخلفية ولوحة الويب تحتاجان إعداد الاستضافة والبريد وإشعارات الدفع؛
+  ملفاتها تُضاف على مراحل قبل تفعيل إشارات حقيقية أو وصول المستخدمين.
 
-After a successful run, download the `cloud-mobile-starter-apk` artifact from
-the workflow run's **Artifacts** section.
+## البناء السحابي
 
-The generated APK is not signed with a production release key. Configure
-signing secrets and a release-signing Gradle setup before distributing an
-app publicly.
+يجهّز `.github/workflows/build.yml` Java 17 وFlutter على GitHub Actions،
+ويولّد Android مع `minSdk = 21`، ويشغّل التحليل والاختبارات، ثم ينتج APK.
+يفعّل `FLAG_SECURE` لمنع لقطات الشاشة/التسجيل المعتاد في Android، لكنه لا
+يمنع التصوير بجهاز خارجي أو يتجاوز جهازاً مخترقاً.
+
+نزّل APK الناجح من **Artifacts** في تشغيل GitHub Actions. البناء الحالي غير
+موقّع بمفتاح توزيع إنتاجي؛ يلزم إعداد توقيع إصدار آمن قبل النشر العام.
+
+## ملاحظات المنتج والسلامة
+
+- درجة الإشارة هي درجة توافق فني من 100، وليست احتمال ربح أو ضماناً.
+- يجب أن يرفض الخادم نشر أي إشارة تقل درجتها عن 65/100.
+- يحدد الخادم وحده انتهاء التجربة/الاشتراك؛ وقت الهاتف لا يمنح وصولاً إضافياً.
+- يجب عرض مصادر الأخبار وروابطها، لا نسخ المقالات.
+- بيانات التحليل عامة للقراءة فقط؛ لا تُستخدم مفاتيح خاصة ولا يُرسل أي أمر تداول.

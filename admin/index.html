@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101827">
+    <title>إدارة إشارات السوق</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">لوحة المشرف</p>
+          <h1>إدارة إشارات السوق</h1>
+        </div>
+        <button id="logout-button" class="button button-muted" type="button" hidden>
+          تسجيل الخروج
+        </button>
+      </header>
+
+      <section id="login-panel" class="panel login-panel">
+        <h2>تسجيل دخول المشرف</h2>
+        <p>يُتحقق من صلاحيات المشرف على الخادم.</p>
+        <form id="login-form">
+          <label>
+            البريد الإلكتروني
+            <input id="email-input" type="email" autocomplete="username" required>
+          </label>
+          <label>
+            كلمة المرور
+            <input id="password-input" type="password" autocomplete="current-password" required>
+          </label>
+          <button class="button" type="submit">دخول</button>
+        </form>
+      </section>
+
+      <section id="dashboard" hidden>
+        <nav class="tabs" aria-label="أقسام لوحة التحكم">
+          <button class="tab active" data-view="overview" type="button">نظرة عامة</button>
+          <button class="tab" data-view="users" type="button">المستخدمون والاشتراكات</button>
+          <button class="tab" data-view="signals" type="button">الإشارات</button>
+          <button class="tab" data-view="settings" type="button">الإعدادات</button>
+        </nav>
+
+        <section id="overview-view" class="view">
+          <div class="cards">
+            <article class="panel metric"><span>المستخدمون</span><strong id="user-count">—</strong></article>
+            <article class="panel metric"><span>الإشارات المعروضة</span><strong id="signal-count">—</strong></article>
+            <article class="panel metric"><span>الحد الأدنى للنشر</span><strong>65/100</strong></article>
+          </div>
+          <p class="notice">
+            درجة التوافق الفني ليست احتمال ربح. لا تُرسل أوامر تداول من هذه اللوحة.
+          </p>
+        </section>
+
+        <section id="users-view" class="view" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>المستخدمون</h2>
+              <p>تفعيل الاشتراك يدوياً؛ وتُحسب البداية بعد انتهاء الوصول الحالي.</p>
+            </div>
+            <button class="button button-muted" data-refresh="users" type="button">تحديث</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>البريد</th><th>الهاتف</th><th>الوصول حتى</th><th>الحالة</th><th>إجراء</th></tr></thead>
+              <tbody id="users-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="signals-view" class="view" hidden>
+          <div class="section-heading">
+            <div>
+              <h2>الإشارات المنشورة</h2>
+              <p>تظهر هنا الإشارات المستوفية حد 65/100 فقط.</p>
+            </div>
+            <button class="button button-muted" data-refresh="signals" type="button">تحديث</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>العملة</th><th>المنصة</th><th>الاتجاه</th><th>التوافق</th><th>الحالة</th><th>وقت الإنشاء</th></tr></thead>
+              <tbody id="signals-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="settings-view" class="view" hidden>
+          <h2>إعدادات التحليل</h2>
+          <p>لا يمكن خفض الحد عن 65/100. الدرجة ليست نسبة نجاح.</p>
+          <form id="settings-form" class="settings-form">
+            <label>
+              الحد الأدنى لدرجة التوافق
+              <input id="score-input" type="number" min="65" max="100" value="65" required>
+            </label>
+            <fieldset>
+              <legend>منصات بيانات السوق</legend>
+              <label class="check"><input name="exchange" type="checkbox" value="binance"> Binance</label>
+              <label class="check"><input name="exchange" type="checkbox" value="bybit"> Bybit</label>
+              <label class="check"><input name="exchange" type="checkbox" value="okx"> OKX</label>
+            </fieldset>
+            <button class="button" type="submit">حفظ الإعدادات</button>
+          </form>
+        </section>
+      </section>
+
+      <div id="status-message" class="status" role="status" aria-live="polite"></div>
+    </main>
+  </body>
+</html>

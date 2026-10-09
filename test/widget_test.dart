@@ -2,10 +2,10 @@ import 'package:cloud_mobile_starter/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows the starter home page', (tester) async {
+  testWidgets('does not show placeholder signals without a backend', (tester) async {
     await tester.pumpWidget(const CloudMobileApp());
 
-    expect(find.text('Cloud Mobile Starter'), findsOneWidget);
-    expect(find.text('Ready to build in the cloud.'), findsOneWidget);
+    expect(find.text('الخدمة الخلفية قيد الإعداد'), findsOneWidget);
+    expect(find.textContaining('لن نعرض إشارات أو أسعاراً تجريبية.'), findsOneWidget);
   });
 }
