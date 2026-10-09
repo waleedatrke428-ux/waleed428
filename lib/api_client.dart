@@ -66,6 +66,8 @@ class ApiClient {
 
   Future<List<Map<String, dynamic>>> getNews() => _getItems('/api/news');
 
+  Future<List<Map<String, dynamic>>> getAlerts() => _getItems('/api/me/alerts');
+
   Future<void> markEntered(String signalId) async {
     await _send('POST', '/api/me/signals/${Uri.encodeComponent(signalId)}/entered');
   }

@@ -323,6 +323,7 @@ class _UserHomePageState extends State<UserHomePage> {
     final pages = <Widget>[
       SignalsPage(client: widget.client),
       MarketsPage(client: widget.client),
+      AlertsPage(client: widget.client),
       NewsPage(client: widget.client),
       AccountPage(client: widget.client, onLogout: _logout),
     ];
@@ -336,6 +337,10 @@ class _UserHomePageState extends State<UserHomePage> {
           destinations: const [
             NavigationDestination(icon: Icon(Icons.bolt), label: 'الإشارات'),
             NavigationDestination(icon: Icon(Icons.search), label: 'العملات'),
+            NavigationDestination(
+              icon: Icon(Icons.notifications_active_outlined),
+              label: 'التنبيهات',
+            ),
             NavigationDestination(icon: Icon(Icons.newspaper), label: 'الأخبار'),
             NavigationDestination(icon: Icon(Icons.person), label: 'حسابي'),
           ],
@@ -486,6 +491,7 @@ class SignalDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final targets = signal['targets'];
+    final takeProfits = targets ?? signal['takeProfits'];
     final rationale = signal['rationale'];
     final levels = signal['levels'];
     return SafeArea(
@@ -506,15 +512,15 @@ class SignalDetails extends StatelessWidget {
             _DetailRow('المنصة', _string(signal, 'exchange', '—')),
             _DetailRow('الدخول', _string(signal, 'entry', '—')),
             _DetailRow('وقف الخسارة', _string(signal, 'stopLoss', '—')),
-            final takeProfits = targets ?? signal['takeProfits'];
             if (takeProfits is List)
               for (var i = 0; i < takeProfits.length && i < 3; i++)
                 _DetailRow('الهدف ${i + 1}', '${takeProfits[i]}'),
             if (levels is Map)
               for (final entry in levels.entries)
                 _DetailRow(entry.key, '${entry.value}'),
+            if (rationale != null)
+              const Text('سبب الإشارة', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('سبب الإشارة', style: TextStyle(fontWeight: FontWeight.bold)),
             Text(_displayList(rationale)),
             if (signal['createdAt'] != null)
               Text('وقت الإنشاء: ${_localTime(signal['createdAt'])}'),
@@ -733,6 +739,83 @@ class AccountPage extends StatefulWidget {
   State<AccountPage> createState() => _AccountPageState();
 }
 
+class AlertsPage extends StatefulWidget {
+  const AlertsPage({required this.client, super.key});
+
+  final ApiClient client;
+
+  @override
+  State<AlertsPage> createState() => _AlertsPageState();
+}
+
+class _AlertsPageState extends State<AlertsPage> {
+  late Future<List<Map<String, dynamic>>> _alerts;
+  Timer? _polling;
+
+  @override
+  void initState() {
+    super.initState();
+    _alerts = widget.client.getAlerts();
+    _polling = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _alerts = widget.client.getAlerts());
+    });
+  }
+
+  @override
+  void dispose() {
+    _polling?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PageScaffold(
+      title: 'تنبيهات الصفقات',
+      actions: [
+        IconButton(
+          tooltip: 'تحديث',
+          onPressed: () => setState(() => _alerts = widget.client.getAlerts()),
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _alerts,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) return _ErrorView(message: '${snapshot.error}');
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.data!.isEmpty) {
+            return const _EmptyView(
+              icon: Icons.notifications_none,
+              message: 'لا توجد تحديثات لصفقات سجّلت دخولك إليها.',
+            );
+          }
+          return ListView.builder(
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              final alert = snapshot.data![index];
+              final details = alert['details'];
+              return ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: Text(
+                  '${_alertLabel(alert['type'])} · '
+                  '${_string(alert, 'symbol', _string(alert, 'signalId', 'صفقة'))}',
+                ),
+                subtitle: Text(
+                  '${_localTime(alert['observedAt'])}'
+                  '${details is Map<String, dynamic> ? '\n${_displayMap(details)}' : ''}',
+                ),
+                isThreeLine: details is Map<String, dynamic>,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _AccountPageState extends State<AccountPage> {
   late Future<Map<String, dynamic>> _entitlement;
   late Future<Map<String, dynamic>> _sessionHours;
@@ -830,7 +913,10 @@ class _AccountPageState extends State<AccountPage> {
           const ListTile(
             leading: Icon(Icons.notifications_outlined),
             title: Text('التنبيهات'),
-            subtitle: Text('سيتم تفعيل التنبيهات بعد إعداد خدمة الإشعارات بالخادم.'),
+            subtitle: Text(
+              'تُحدّث التنبيهات داخل التطبيق أثناء فتحه. '
+              'إشعارات الدفع بالخلفية تحتاج إعداد FCM.',
+            ),
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
@@ -952,6 +1038,29 @@ String _displayList(Object? value) {
   return 'لا يوجد شرح متاح.';
 }
 
+String _displayMap(Map<String, dynamic> value) {
+  return value.entries
+      .map((entry) => '${entry.key}: ${entry.value}')
+      .join(' · ');
+}
+
+String _alertLabel(Object? value) {
+  switch (value) {
+    case 'signal_created':
+      return 'إشارة جديدة';
+    case 'entry_reached':
+      return 'وصل السعر لمنطقة الدخول';
+    case 'stop_loss_hit':
+      return 'تم الوصول لوقف الخسارة';
+    case 'take_profit_hit':
+      return 'تم الوصول لأحد الأهداف';
+    case 'reversal':
+      return 'رُصد انعكاس محتمل';
+    default:
+      return value is String ? value : 'تحديث صفقة';
+  }
+}
+
 String _localTime(Object? value) {
   if (value is! String) return '—';
   final parsed = DateTime.tryParse(value);
@@ -986,5 +1095,5 @@ String _sessionHoursLabel(Object? value) {
   final end = value['end'];
   final date = value['date'];
   if (start is! String || end is! String) return 'الساعات غير متاحة.';
-  return '${start}–$end${date is String ? ' · $date' : ''}';
+  return '$start–$end${date is String ? ' · $date' : ''}';
 }
