@@ -29,7 +29,7 @@ class SignalsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'إشارات السوق',
+      title: 'كريبتو البلحوسي',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar'),
       theme: ThemeData(
@@ -179,7 +179,7 @@ class _LoginPageState extends State<LoginPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(title: const Text('إشارات السوق')),
+        appBar: AppBar(title: const Text('كريبتو البلحوسي')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),

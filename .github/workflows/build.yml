@@ -50,6 +50,26 @@ jobs:
       - name: Generate Android project
         run: flutter create --platforms=android --project-name cloud_mobile_starter --org com.example --no-pub .
 
+      - name: Set Android app name
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          content = manifest.read_text(encoding="utf-8")
+          updated, replacements = re.subn(
+              r'(<application\b[^>]*\bandroid:label=")[^"]+(")',
+              r'\1كريبتو البلحوسي\2',
+              content,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if replacements != 1:
+              raise SystemExit(f"Could not set app label in {manifest}")
+          manifest.write_text(updated, encoding="utf-8")
+          PY
+
       - name: Block Android screenshots and screen recording
         run: |
           python3 - <<'PY'
