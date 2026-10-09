@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -342,7 +344,10 @@ class _SignalsPageState extends State<SignalsPage> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final signals = snapshot.data!;
+          final signals = snapshot.data!
+              .where((signal) =>
+                  _number(signal, 'score', _number(signal, 'strength', 0)) >= 65)
+              .toList(growable: false);
           if (signals.isEmpty) {
             return const _EmptyView(
               icon: Icons.hourglass_empty,
@@ -513,6 +518,7 @@ class MarketsPage extends StatefulWidget {
 class _MarketsPageState extends State<MarketsPage> {
   final _search = TextEditingController();
   late Future<List<Map<String, dynamic>>> _markets;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -522,12 +528,19 @@ class _MarketsPageState extends State<MarketsPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
   void _find() {
-    setState(() => _markets = widget.client.getMarkets(query: _search.text.trim()));
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() =>
+            _markets = widget.client.getMarkets(query: _search.text.trim()));
+      }
+    });
   }
 
   @override
@@ -701,6 +714,7 @@ class _AccountPageState extends State<AccountPage> {
                       Text(
                         'ينتهي في: ${_localTime(data['expiresAt'] ?? data['trialEndsAt'])}',
                       ),
+                      Text('الوقت المتبقي: ${_remaining(data)}'),
                     ],
                   ),
                 ),
@@ -848,4 +862,26 @@ String _localTime(Object? value) {
   if (value is! String) return '—';
   final parsed = DateTime.tryParse(value);
   return parsed?.toLocal().toString() ?? value;
+}
+
+String _remaining(Map<String, dynamic> entitlement) {
+  final seconds = entitlement['remainingSeconds'];
+  Duration? remaining;
+  if (seconds is num) {
+    remaining = Duration(seconds: seconds.toInt());
+  } else {
+    final expires = DateTime.tryParse(
+      '${entitlement['expiresAt'] ?? entitlement['trialEndsAt'] ?? ''}',
+    );
+    final serverNow = DateTime.tryParse('${entitlement['serverNow'] ?? ''}');
+    if (expires != null && serverNow != null) {
+      remaining = expires.difference(serverNow);
+    }
+  }
+  if (remaining == null) return '—';
+  if (remaining.isNegative || remaining == Duration.zero) return 'منتهي';
+  final days = remaining.inDays;
+  final hours = remaining.inHours.remainder(24);
+  final minutes = remaining.inMinutes.remainder(60);
+  return '$days يوم · $hours ساعة · $minutes دقيقة';
 }

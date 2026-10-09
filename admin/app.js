@@ -195,11 +195,10 @@
       if (typeof token !== 'string' || token.length < 16) {
         throw new Error('استجابة تسجيل الدخول لا تحتوي رمزاً صالحاً.');
       }
-      state.token = token;
-      if (result.role && result.role !== 'admin') {
-        logout(false);
+      if (result.role !== 'admin') {
         throw new Error('هذا الحساب لا يملك صلاحية المشرف.');
       }
+      state.token = token;
       enterDashboard();
     } catch (error) {
       showStatus(error.message);
