@@ -59,4 +59,28 @@ void main() {
     expect(find.text('الهدف 1'), findsOneWidget);
     expect(find.text('دخلت الصفقة'), findsNothing);
   });
+
+  test('reports HTML hosting challenge instead of treating it as JSON', () async {
+    final client = ApiClient(
+      defaultApiBaseUrl,
+      httpClient: MockClient(
+        (_) async => http.Response(
+          '<html><body>Challenge</body></html>',
+          200,
+          headers: {'content-type': 'text/html'},
+        ),
+      ),
+    );
+
+    await expectLater(
+      client.getSignals(),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          contains('صفحة HTML'),
+        ),
+      ),
+    );
+  });
 }

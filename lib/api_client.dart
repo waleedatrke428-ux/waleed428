@@ -166,6 +166,14 @@ class ApiClient {
       try {
         decoded = jsonDecode(response.body);
       } on FormatException {
+        final contentType = response.headers['content-type'] ?? '';
+        if (contentType.contains('text/html') ||
+            response.body.trimLeft().startsWith('<')) {
+          throw const ApiException(
+            'أعاد الخادم صفحة HTML بدلاً من بيانات الإشارات. '
+            'تحقق من رابط API وإعدادات الاستضافة.',
+          );
+        }
         throw const ApiException('استجابة الخادم غير صالحة.');
       }
     }

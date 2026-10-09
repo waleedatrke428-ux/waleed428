@@ -50,7 +50,7 @@ jobs:
       - name: Generate Android project
         run: flutter create --platforms=android --project-name cloud_mobile_starter --org com.example --no-pub .
 
-      - name: Set Android app name
+      - name: Set Android app name and internet access
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -58,6 +58,15 @@ jobs:
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           content = manifest.read_text(encoding="utf-8")
+          if "android.permission.INTERNET" not in content:
+              root = re.search(r"<manifest\b[^>]*>", content)
+              if root is None:
+                  raise SystemExit(f"Could not locate manifest root in {manifest}")
+              content = (
+                  content[:root.end()]
+                  + '\n    <uses-permission android:name="android.permission.INTERNET" />'
+                  + content[root.end():]
+              )
           updated, replacements = re.subn(
               r'(<application\b[^>]*\bandroid:label=")[^"]+(")',
               r'\1كريبتو البلحوسي\2',
@@ -67,6 +76,8 @@ jobs:
           )
           if replacements != 1:
               raise SystemExit(f"Could not set app label in {manifest}")
+          if "android.permission.INTERNET" not in updated:
+              raise SystemExit(f"Internet permission missing from {manifest}")
           manifest.write_text(updated, encoding="utf-8")
           PY
 
