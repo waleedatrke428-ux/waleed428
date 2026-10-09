@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+const defaultApiBaseUrl = 'https://waleed.freehosting.dev';
+
 class ApiException implements Exception {
   const ApiException(this.message);
 
@@ -12,9 +14,9 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  ApiClient(String baseUrl)
+  ApiClient(String baseUrl, {http.Client? httpClient})
       : _baseUri = Uri.parse(baseUrl),
-        _client = http.Client();
+        _client = httpClient ?? http.Client();
 
   final Uri _baseUri;
   final http.Client _client;
@@ -53,8 +55,36 @@ class ApiClient {
   Future<Map<String, dynamic>> getSessionHours(String timezone) =>
       _send('GET', '/api/me/session-hours', extraHeaders: {'X-Timezone': timezone});
 
-  Future<List<Map<String, dynamic>>> getSignals() =>
-      _getItems('/api/signals');
+  Future<List<Map<String, dynamic>>> getSignals() async {
+    final response = await _send('GET', '/get_signals.php');
+    final items = response['data'] ?? response['items'];
+    if (items is! List) {
+      throw const ApiException('استجابة الخادم لا تحتوي قائمة إشارات صالحة.');
+    }
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(_normalizeSignal)
+        .toList(growable: false);
+  }
+
+  Map<String, dynamic> _normalizeSignal(Map<String, dynamic> signal) {
+    final targets = [
+      signal['target_1'],
+      signal['target_2'],
+      signal['target_3'],
+    ].where((target) => target != null).toList(growable: false);
+
+    return {
+      ...signal,
+      'id': '${signal['id'] ?? ''}',
+      'side': signal['direction'] ?? signal['side'] ?? '—',
+      'entry': signal['entry'] ?? signal['entry_price'],
+      'stopLoss': signal['stopLoss'] ?? signal['stop_loss'],
+      'targets': signal['targets'] ?? targets,
+      'exchange': signal['exchange'] ?? '—',
+      'status': signal['status'] ?? 'غير محددة',
+    };
+  }
 
   Future<List<Map<String, dynamic>>> getMarkets({String query = ''}) async {
     final items = await _getItems(
@@ -114,15 +144,15 @@ class ApiClient {
       );
     }
 
-    Object? decoded;
-    if (response.body.isNotEmpty) {
-      try {
-        decoded = jsonDecode(response.body);
-      } on FormatException {
-        throw const ApiException('استجابة الخادم غير صالحة.');
-      }
-    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      Object? decoded;
+      if (response.body.isNotEmpty) {
+        try {
+          decoded = jsonDecode(response.body);
+        } on FormatException {
+          // Non-JSON web-server errors still report their HTTP status below.
+        }
+      }
       final payload = decoded is Map<String, dynamic> ? decoded : null;
       final message = payload?['message'] ?? payload?['detail'];
       throw ApiException(
@@ -130,6 +160,14 @@ class ApiClient {
             ? message
             : 'تعذّر تنفيذ الطلب (${response.statusCode}).',
       );
+    }
+    Object? decoded;
+    if (response.body.isNotEmpty) {
+      try {
+        decoded = jsonDecode(response.body);
+      } on FormatException {
+        throw const ApiException('استجابة الخادم غير صالحة.');
+      }
     }
     if (decoded is Map<String, dynamic>) return decoded;
     throw const ApiException('استجابة الخادم غير مكتملة.');

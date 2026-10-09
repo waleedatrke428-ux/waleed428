@@ -6,7 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_client.dart';
 
-const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+const _apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: defaultApiBaseUrl,
+);
 final _apiBaseUrlIsValid = _isValidApiBaseUrl(_apiBaseUrl);
 
 void main() {
@@ -19,7 +22,9 @@ bool _isValidApiBaseUrl(String value) {
 }
 
 class SignalsApp extends StatelessWidget {
-  const SignalsApp({super.key});
+  const SignalsApp({super.key, this.client});
+
+  final ApiClient? client;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +39,10 @@ class SignalsApp extends StatelessWidget {
       ),
       home: !_apiBaseUrlIsValid
           ? const ServerSetupPage()
-          : LoginPage(client: ApiClient(_apiBaseUrl)),
+          : SignalsPage(
+              client: client ?? ApiClient(_apiBaseUrl),
+              readOnly: true,
+            ),
     );
   }
 }
@@ -361,9 +369,14 @@ class _UserHomePageState extends State<UserHomePage> {
 }
 
 class SignalsPage extends StatefulWidget {
-  const SignalsPage({required this.client, super.key});
+  const SignalsPage({
+    required this.client,
+    this.readOnly = false,
+    super.key,
+  });
 
   final ApiClient client;
+  final bool readOnly;
 
   @override
   State<SignalsPage> createState() => _SignalsPageState();
@@ -402,10 +415,16 @@ class _SignalsPageState extends State<SignalsPage> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final signals = snapshot.data!
-              .where((signal) =>
-                  _number(signal, 'score', _number(signal, 'strength', 0)) >= 65)
-              .toList(growable: false);
+          final signals = widget.readOnly
+              ? snapshot.data!
+              : snapshot.data!
+                  .where((signal) => _number(
+                        signal,
+                        'score',
+                        _number(signal, 'strength', 0),
+                      ) >=
+                      65)
+                  .toList(growable: false);
           if (signals.isEmpty) {
             return const _EmptyView(
               icon: Icons.hourglass_empty,
@@ -420,6 +439,7 @@ class _SignalsPageState extends State<SignalsPage> {
               itemBuilder: (context, index) => SignalCard(
                 signal: signals[index],
                 client: widget.client,
+                readOnly: widget.readOnly,
               ),
             ),
           );
@@ -430,10 +450,16 @@ class _SignalsPageState extends State<SignalsPage> {
 }
 
 class SignalCard extends StatelessWidget {
-  const SignalCard({required this.signal, required this.client, super.key});
+  const SignalCard({
+    required this.signal,
+    required this.client,
+    this.readOnly = false,
+    super.key,
+  });
 
   final Map<String, dynamic> signal;
   final ApiClient client;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -448,7 +474,11 @@ class SignalCard extends StatelessWidget {
         onTap: () => showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
-          builder: (_) => SignalDetails(signal: signal, client: client),
+          builder: (_) => SignalDetails(
+            signal: signal,
+            client: client,
+            readOnly: readOnly,
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -466,10 +496,11 @@ class SignalCard extends StatelessWidget {
                   Chip(label: Text(side)),
                 ],
               ),
-              Text('درجة التوافق: ${score.toStringAsFixed(0)}/100'),
+              if (!readOnly)
+                Text('درجة التوافق: ${score.toStringAsFixed(0)}/100'),
               const SizedBox(height: 6),
               Text('الدخول: ${_string(signal, 'entry', '—')}'),
-              Text('الحالة: ${_string(signal, 'status', '—')}'),
+              Text('الحالة: ${_string(signal, 'status', 'غير محددة')}'),
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text('التفاصيل'),
@@ -483,10 +514,16 @@ class SignalCard extends StatelessWidget {
 }
 
 class SignalDetails extends StatelessWidget {
-  const SignalDetails({required this.signal, required this.client, super.key});
+  const SignalDetails({
+    required this.signal,
+    required this.client,
+    this.readOnly = false,
+    super.key,
+  });
 
   final Map<String, dynamic> signal;
   final ApiClient client;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -504,55 +541,64 @@ class SignalDetails extends StatelessWidget {
               '${_string(signal, 'symbol', '—')} · ${_string(signal, 'side', '—')}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            Text(
-              'درجة التوافق: ${_number(signal, 'score', 0).toStringAsFixed(0)}/100 '
-              '(ليست احتمال ربح)',
-            ),
+            if (!readOnly)
+              Text(
+                'درجة التوافق: ${_number(signal, 'score', 0).toStringAsFixed(0)}/100 '
+                '(ليست احتمال ربح)',
+              ),
             const SizedBox(height: 12),
             _DetailRow('المنصة', _string(signal, 'exchange', '—')),
             _DetailRow('الدخول', _string(signal, 'entry', '—')),
             _DetailRow('وقف الخسارة', _string(signal, 'stopLoss', '—')),
+            if (signal['leverage'] != null)
+              _DetailRow('الرافعة', '${signal['leverage']}x'),
+            if (signal['risk_percent'] != null)
+              _DetailRow('نسبة المخاطرة', '${signal['risk_percent']}%'),
             if (takeProfits is List)
               for (var i = 0; i < takeProfits.length && i < 3; i++)
                 _DetailRow('الهدف ${i + 1}', '${takeProfits[i]}'),
             if (levels is Map)
               for (final entry in levels.entries)
                 _DetailRow(entry.key, '${entry.value}'),
-            if (rationale != null)
+            if (rationale != null) ...[
               const Text('سبب الإشارة', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(_displayList(rationale)),
+              const SizedBox(height: 8),
+              Text(_displayList(rationale)),
+            ],
             if (signal['createdAt'] != null)
               Text('وقت الإنشاء: ${_localTime(signal['createdAt'])}'),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () async {
-                final id = signal['id'];
-                if (id is! String || id.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('معرّف الإشارة غير صالح.')),
-                  );
-                  return;
-                }
-                try {
-                  await client.markEntered(id);
-                  if (context.mounted) {
-                    Navigator.pop(context);
+            if (!readOnly)
+              FilledButton.icon(
+                onPressed: () async {
+                  final id = signal['id'];
+                  if (id is! String || id.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم تسجيل دخولك لهذه الصفقة.')),
+                      const SnackBar(content: Text('معرّف الإشارة غير صالح.')),
                     );
+                    return;
                   }
-                } on ApiException catch (error) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(error.message)),
-                    );
+                  try {
+                    await client.markEntered(id);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('تم تسجيل دخولك لهذه الصفقة.'),
+                        ),
+                      );
+                    }
+                  } on ApiException catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error.message)),
+                      );
+                    }
                   }
-                }
-              },
-              icon: const Icon(Icons.login),
-              label: const Text('دخلت الصفقة'),
-            ),
+                },
+                icon: const Icon(Icons.login),
+                label: const Text('دخلت الصفقة'),
+              ),
             const SizedBox(height: 8),
             const Text(
               'الإشارات معلومات تحليلية فقط. العقود الآجلة عالية المخاطر '
@@ -1022,7 +1068,9 @@ class _DetailRow extends StatelessWidget {
 
 String _string(Map<String, dynamic> value, String key, String fallback) {
   final item = value[key];
-  return item is String && item.isNotEmpty ? item : fallback;
+  if (item is String && item.isNotEmpty) return item;
+  if (item is num) return item.toString();
+  return fallback;
 }
 
 double _number(Map<String, dynamic> value, String key, double fallback) {
