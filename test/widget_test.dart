@@ -3,66 +3,36 @@ import 'dart:convert';
 import 'package:cloud_mobile_starter/api_client.dart';
 import 'package:cloud_mobile_starter/main.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows PHP signals in read-only mode', (tester) async {
+  testWidgets('requires account login before showing signals', (tester) async {
     final client = ApiClient(
-      defaultApiBaseUrl,
-      httpClient: MockClient((request) async {
-        expect(request.url.scheme, 'https');
-        expect(request.url.host, 'waleed.freehosting.dev');
-        expect(request.url.path, '/get_signals.php');
-        expect(request.method, 'GET');
-        return http.Response(
-          jsonEncode({
-            'status': 'success',
-            'count': 1,
-            'data': [
-              {
-                'id': 7,
-                'symbol': 'BTCUSDT',
-                'direction': 'LONG',
-                'entry_price': 60000,
-                'target_1': 62000,
-                'target_2': 64000,
-                'target_3': 66000,
-                'stop_loss': 58000,
-                'leverage': 3,
-                'risk_percent': 1,
-              },
-            ],
-          }),
-          200,
-          headers: {'content-type': 'application/json'},
-        );
-      }),
+      'https://api.example.test',
+      httpClient: MockClient(
+        (_) async => throw StateError('Unexpected request before login'),
+      ),
     );
 
-    await tester.pumpWidget(SignalsApp(client: client));
+    await tester.pumpWidget(
+      SignalsApp(client: client, apiBaseUrl: 'https://api.example.test'),
+    );
     await tester.pumpAndSettle();
 
     expect(
       tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
       'كريبتو البلحوسي',
     );
-    expect(find.text('BTCUSDT · —'), findsOneWidget);
-    expect(find.text('الدخول: 60000'), findsOneWidget);
-    expect(find.textContaining('درجة التوافق:'), findsNothing);
-
-    await tester.tap(find.text('BTCUSDT · —'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('وقف الخسارة'), findsOneWidget);
-    expect(find.text('الهدف 1'), findsOneWidget);
-    expect(find.text('دخلت الصفقة'), findsNothing);
+    expect(find.text('تسجيل الدخول'), findsOneWidget);
+    expect(find.text('إنشاء حساب جديد'), findsOneWidget);
   });
 
-  test('reports HTML hosting challenge instead of treating it as JSON', () async {
+  test('reports HTML hosting challenge instead of treating it as JSON',
+      () async {
     final client = ApiClient(
-      defaultApiBaseUrl,
+      'https://api.example.test',
       httpClient: MockClient(
         (_) async => http.Response(
           '<html><body>Challenge</body></html>',
@@ -82,5 +52,39 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('loads protected signals and adapts the FastAPI response', () async {
+    final client = ApiClient(
+      'https://api.example.test',
+      httpClient: MockClient((request) async {
+        expect(request.url.path, '/api/signals');
+        expect(request.headers['authorization'], 'Bearer test-token');
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 'signal-1',
+                'symbol': 'BTCUSDT',
+                'exchange': 'binance',
+                'direction': 'long',
+                'entry': 60000,
+                'stopLoss': 58000,
+                'takeProfits': [62000, 64000, 66000],
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    )..accessToken = 'test-token';
+
+    final signals = await client.getSignals();
+
+    expect(signals.single['side'], 'long');
+    expect(signals.single['entry'], 60000);
+    expect(signals.single['stopLoss'], 58000);
+    expect(signals.single['targets'], [62000, 64000, 66000]);
   });
 }

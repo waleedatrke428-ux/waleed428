@@ -6,11 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_client.dart';
 
-const _apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: defaultApiBaseUrl,
-);
-final _apiBaseUrlIsValid = _isValidApiBaseUrl(_apiBaseUrl);
+const _buildApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 
 void main() {
   runApp(const SignalsApp());
@@ -22,12 +18,15 @@ bool _isValidApiBaseUrl(String value) {
 }
 
 class SignalsApp extends StatelessWidget {
-  const SignalsApp({super.key, this.client});
+  const SignalsApp({super.key, this.client, this.apiBaseUrl});
 
   final ApiClient? client;
+  final String? apiBaseUrl;
 
   @override
   Widget build(BuildContext context) {
+    final baseUrl = apiBaseUrl ?? _buildApiBaseUrl;
+    final apiBaseUrlIsValid = _isValidApiBaseUrl(baseUrl);
     return MaterialApp(
       title: 'كريبتو البلحوسي',
       debugShowCheckedModeBanner: false,
@@ -37,12 +36,9 @@ class SignalsApp extends StatelessWidget {
         fontFamily: 'Roboto',
         useMaterial3: true,
       ),
-      home: !_apiBaseUrlIsValid
+      home: !apiBaseUrlIsValid
           ? const ServerSetupPage()
-          : SignalsPage(
-              client: client ?? ApiClient(_apiBaseUrl),
-              readOnly: true,
-            ),
+          : LoginPage(client: client ?? ApiClient(baseUrl)),
     );
   }
 }

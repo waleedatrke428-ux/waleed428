@@ -46,8 +46,8 @@ class _ServerSetupPage extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'تطبيق المدير جاهز، لكن عنوان HTTPS لخادم الإدارة غير مضبوط. '
-                'انشر خادم FastAPI واضبط MANAGER_API_BASE_URL للبناء.',
+                'تطبيق المدير جاهز، لكن عنوان HTTPS للخادم غير مضبوط. '
+                'انشر خادم FastAPI واضبط API_BASE_URL للبناء.',
                 textAlign: TextAlign.center,
               ),
             ),

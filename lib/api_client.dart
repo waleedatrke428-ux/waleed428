@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-const defaultApiBaseUrl = 'https://waleed.freehosting.dev';
-
 class ApiException implements Exception {
   const ApiException(this.message);
 
@@ -56,8 +54,8 @@ class ApiClient {
       _send('GET', '/api/me/session-hours', extraHeaders: {'X-Timezone': timezone});
 
   Future<List<Map<String, dynamic>>> getSignals() async {
-    final response = await _send('GET', '/get_signals.php');
-    final items = response['data'] ?? response['items'];
+    final response = await _send('GET', '/api/signals');
+    final items = response['items'];
     if (items is! List) {
       throw const ApiException('استجابة الخادم لا تحتوي قائمة إشارات صالحة.');
     }
@@ -80,7 +78,7 @@ class ApiClient {
       'side': signal['direction'] ?? signal['side'] ?? '—',
       'entry': signal['entry'] ?? signal['entry_price'],
       'stopLoss': signal['stopLoss'] ?? signal['stop_loss'],
-      'targets': signal['targets'] ?? targets,
+      'targets': signal['targets'] ?? signal['takeProfits'] ?? targets,
       'exchange': signal['exchange'] ?? '—',
       'status': signal['status'] ?? 'غير محددة',
     };

@@ -18,7 +18,10 @@ probability, win rate, or investment recommendation.
 
 The compose build context is the project root so the image can copy the server
 code. Management is performed by the separate Android manager app; this API
-does not serve a web dashboard. On a VPS, terminate TLS in a reverse proxy and
+does not serve a web dashboard. Both Android apps must use this API base URL
+over HTTPS (`API_BASE_URL` in GitHub Actions; `MANAGER_API_BASE_URL` may
+override it for the manager). The old PHP-only host cannot provide the
+authentication, entitlement, signal, or management API. On a VPS, terminate TLS in a reverse proxy and
 proxy the API and health check to the container; for example:
 
 ```nginx
@@ -30,6 +33,12 @@ Persist the compose `postgres_data` volume and protect the host/DB network. For
 production, replace local passwords/secrets, use TLS, set `APP_BASE_URL` and
 restrict `ALLOWED_ORIGINS`. No deployment or credential provisioning is done
 by this repository.
+
+Free hosting can be used for a trial deployment, but check its sleep/cold-start
+limits, database persistence/expiry, outbound market-data access, and regional
+availability first. The API needs a continuously reachable HTTPS service and a
+persistent PostgreSQL database to preserve accounts, trials, and subscriptions;
+ephemeral storage is not suitable for the database.
 
 ## Configuration
 
