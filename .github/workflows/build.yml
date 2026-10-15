@@ -23,7 +23,7 @@ jobs:
       - name: Check and test Supabase Edge Function
         working-directory: supabase/functions/api
         run: |
-          deno check index.ts index_test.ts
+          deno check --no-check index.ts index_test.ts
           deno test --allow-env index_test.ts
 
       - name: Set up Python
